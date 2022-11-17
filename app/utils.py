@@ -381,12 +381,11 @@ def remove_object_tagging(s3_client, object_name):
         logging.error(exc)
 
 
-def submit_promotion(description, email, file_path, object_name):
+def submit_promotion(description, email, file_path):
     """
     :param description: promotion description
     :param email: user email
     :param file_path: path to file
-    :param object_name: file name
     :return:
     """
     # Submit promotion
@@ -399,7 +398,8 @@ def submit_promotion(description, email, file_path, object_name):
     })
     logging.info('Promotion inserted [{0}]'.format(_pid.inserted_id))
     # Upload image
-    s3_upload(get_s3_resource(), file_path, object_name)
+    object_name = generate_name()
+    s3_upload(get_s3_resource(), UPLOAD_PATH + file_path, object_name)
     # Map Image_name to Promotion_id
     image_col = get_collection('Image')
     _mid = insert(image_col, {
@@ -407,6 +407,8 @@ def submit_promotion(description, email, file_path, object_name):
         'promotion_id': _pid.inserted_id
     })
     logging.info('ImageMap inserted [{0}]'.format(_mid.inserted_id))
+    # Publish promotion id
+    # Must be string because ObjectId datatype does not have len property which causes RabbitMQ to crash
     mq_publish_promotion_id(str(_pid.inserted_id))
     # todo: Email submission results to submitter
 

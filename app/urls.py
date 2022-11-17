@@ -19,4 +19,5 @@ from app import views
 
 urlpatterns = [
     path("", views.hello_world),
+    path("submit", views.submit),
 ]
