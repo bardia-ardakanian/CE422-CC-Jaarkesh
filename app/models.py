@@ -1,4 +1,4 @@
-from enum import Enum
+import enum
 from django.db import models
 from datetime import datetime
 import json
@@ -15,10 +15,10 @@ class Response:
         self.datetime = datetime.now().strftime("%d-%b-%Y (%H:%M:%S.%f)")
 
     def json(self):
-        return json.dumps(self.__dict__, indent=4)
+        return json.dumps(self.__dict__, indent=2)
 
 
-class State(Enum):
+class State(enum.Enum):
     PROCESSING = 1
     ACCEPTED = 2
     REJECTED = 3

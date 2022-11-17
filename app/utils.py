@@ -1,3 +1,5 @@
+from bson import ObjectId
+from Jaarkesh.settings import DEBUG
 from app.models import State
 from pymongo import MongoClient
 from botocore.exceptions import ClientError
@@ -116,6 +118,17 @@ def delete_many(col, query):
 
 def delete_all(col):
     col.delete_many({})
+
+
+"""
+Promotion State Filter
+"""
+
+
+def get_promotion_by_id(_pid):
+    col = get_collection('Promotion')
+
+    return find(col, {"_id": ObjectId(_pid)})[0]
 
 
 """
@@ -278,9 +291,12 @@ def remove_bucket_tagging(s3_client):
 """
 S3 upload and download
 """
-
-UPLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/upload'
-DOWNLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/download'
+if DEBUG:
+    UPLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/upload'
+    DOWNLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/download'
+else:
+    UPLOAD_PATH = '/home/ubuntu/tmp/upload'
+    DOWNLOAD_PATH = '/home/ubuntu/tmp/download'
 
 
 def s3_upload(s3_resource, file_path, object_name):
@@ -381,7 +397,7 @@ def remove_object_tagging(s3_client, object_name):
         logging.error(exc)
 
 
-def submit_promotion(description, email, file_path):
+def submit(description, email, file_path):
     """
     :param description: promotion description
     :param email: user email
@@ -410,7 +426,6 @@ def submit_promotion(description, email, file_path):
     # Publish promotion id
     # Must be string because ObjectId datatype does not have len property which causes RabbitMQ to crash
     mq_publish_promotion_id(str(_pid.inserted_id))
-    # todo: Email submission results to submitter
 
     return _pid.inserted_id, _mid.inserted_id
 
@@ -468,7 +483,37 @@ def mq_publish_promotion_id(_pid):
     mq_close_connection(conn)
 
 
+# print(State(1))
 # promotion_col = get_collection('Promotion')
+# x = find(promotion_col, {"_id": ObjectId('63769aa39b4865d2ced554ad')})
+# for i in x:
+#     print(x)
+# image_col = get_collection('Image')
+# delete_all(promotion_col)
+# delete_all(image_col)
+#
+# promotions = [
+#     {
+#         'description': 'Hi, Mom!',
+#         'email': '1@email.com',
+#         'state': State.PROCESSING.value,
+#         'category': None
+#     },
+#     {
+#         'description': 'Hi, Dad!',
+#         'email': '2@email.com',
+#         'state': State.ACCEPTED.value,
+#         'category': None
+#     },
+#     {
+#         'description': 'Hi, Bro!',
+#         'email': '3@email.com',
+#         'state': State.REJECTED.value,
+#         'category': None
+#     },
+# ]
+#
+# insert_many(promotion_col, promotions)
 # image_col = get_collection('Image')
 # delete_all(promotion_col)
 # delete_all(image_col)
