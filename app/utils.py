@@ -1,15 +1,18 @@
-import json
-import os.path
-
+from app.models import State
 from pymongo import MongoClient
 from botocore.exceptions import ClientError
 import boto3
+import pika
 import logging
+import json
+import os.path
+import secrets
 
 CONNECTION_STRING = 'mongodb+srv://mongoadmin:Cij3mPHBEvsWr5Jw' \
                     '@cluster0.dpliugt.mongodb.net/?retryWrites=true&w=majority'
 DB_NAME = 'Jaarkesh'
-COL_NAME = 'Promotion'
+PROMOTION_COL = 'Promotion'
+IMAGE_COL = 'Image'
 
 """
 connect()
@@ -27,14 +30,23 @@ def shutdown_db_client(client):
 
 
 def get_promotion_col(db):
-    return db[COL_NAME]
+    return db[PROMOTION_COL]
 
 
-def get_promotions():
+def get_image_col(db):
+    return db[IMAGE_COL]
+
+
+def get_collection(col_name):
     db = get_db_client()
-    promo_col = get_promotion_col(db)
 
-    return promo_col
+    col = None
+    if col_name == 'Promotion':
+        col = get_promotion_col(db)
+    if col_name == 'Image':
+        col = get_image_col(db)
+
+    return col
 
 
 """
@@ -267,7 +279,8 @@ def remove_bucket_tagging(s3_client):
 S3 upload and download
 """
 
-DOWNLOAD_PATH = '/Users/Bardia/Downloads/img'
+UPLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/upload'
+DOWNLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/download'
 
 
 def s3_upload(s3_resource, file_path, object_name):
@@ -366,3 +379,113 @@ def remove_object_tagging(s3_client, object_name):
         logging.info(response)
     except ClientError as exc:
         logging.error(exc)
+
+
+def submit_promotion(description, email, file_path, object_name):
+    """
+    :param description: promotion description
+    :param email: user email
+    :param file_path: path to file
+    :param object_name: file name
+    :return:
+    """
+    # Submit promotion
+    promotion_col = get_collection('Promotion')
+    _pid = insert(promotion_col, {
+        'description': description,
+        'email': email,
+        'state': State.PROCESSING.value,
+        'category': None
+    })
+    logging.info('Promotion inserted [{0}]'.format(_pid.inserted_id))
+    # Upload image
+    s3_upload(get_s3_resource(), file_path, object_name)
+    # Map Image_name to Promotion_id
+    image_col = get_collection('Image')
+    _mid = insert(image_col, {
+        'image_name': object_name,
+        'promotion_id': _pid.inserted_id
+    })
+    logging.info('ImageMap inserted [{0}]'.format(_mid.inserted_id))
+    mq_publish_promotion_id(str(_pid.inserted_id))
+    # todo: Email submission results to submitter
+
+    return _pid.inserted_id, _mid.inserted_id
+
+
+def generate_name():
+    return secrets.token_hex(16) + '.jpeg'
+
+
+"""
+RabbitMQ Message broker service
+"""
+
+AMQP_URL = 'amqps://visptmhc:LN7y3ZvEWB4t8HTIrXgPuTb3gmuwWW0-@stingray.rmq.cloudamqp.com/visptmhc'
+QUEUE = 'PROMOTION_QUEUE'
+
+
+def mq_make_connection():
+    return pika.BlockingConnection(pika.URLParameters(AMQP_URL))
+
+
+def mq_close_connection(connection):
+    connection.close()
+
+
+def mq_get_channel(connection):
+    return connection.channel()
+
+
+def mq_make_queue(channel, queue):
+    channel.queue_declare(queue=queue)
+
+
+def mq_publish(channel, routing, body):
+    channel.basic_publish(exchange='', routing_key=routing, body=body)
+    logging.info(" [x] Sent {0}".format(body))
+
+
+def callback(ch, method, properties, body):
+    print(" [x] Received %r" % body)
+
+
+def mq_consume(channel):
+    channel.basic_consume(queue=QUEUE, on_message_callback=callback, auto_ack=True)
+
+    print(' [*] Waiting for messages. To exit press CTRL+C')
+    channel.start_consuming()
+
+
+def mq_publish_promotion_id(_pid):
+    conn = mq_make_connection()
+    channel = mq_get_channel(conn)
+
+    mq_publish(channel, QUEUE, _pid)
+
+    mq_close_connection(conn)
+
+
+# promotion_col = get_collection('Promotion')
+# image_col = get_collection('Image')
+# delete_all(promotion_col)
+# delete_all(image_col)
+#
+# pid, mid = submit_promotion(
+#     "Test01. John Doe",
+#     "JohnDoe@email.com",
+#     UPLOAD_PATH + "/monkey.jpg",
+#     secrets.token_hex(16) + '.jpeg'
+# )
+#
+# image_map = find(image_col, {"_id": mid})[0]
+# print(image_map)
+#
+# s3_download(get_s3_resource(), image_map["image_name"])
+#
+# conn = mq_make_connection()
+# channel = mq_get_channel(conn)
+#
+# mq_consume(channel)
+#
+# mq_close_connection(conn)
