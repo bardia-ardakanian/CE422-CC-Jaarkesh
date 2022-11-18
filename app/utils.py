@@ -1,13 +1,17 @@
+import threading
+
 from bson import ObjectId
 from Jaarkesh.settings import DEBUG
 from app.models import State
 from pymongo import MongoClient
 from botocore.exceptions import ClientError
+from email.mime.text import MIMEText
 import boto3
 import pika
+import requests
+import smtplib
 import logging
 import json
-import os.path
 import secrets
 
 CONNECTION_STRING = 'mongodb+srv://mongoadmin:Cij3mPHBEvsWr5Jw' \
@@ -121,7 +125,7 @@ def delete_all(col):
 
 
 """
-Promotion State Filter
+Collections Queries
 """
 
 
@@ -129,6 +133,20 @@ def get_promotion_by_id(_pid):
     col = get_collection('Promotion')
 
     return find(col, {"_id": ObjectId(_pid)})[0]
+
+
+def get_image_name_by_pid(_pid):
+    col = get_collection('Image')
+
+    return find(col, {'promotion_id': ObjectId(_pid)})[0]
+
+
+def purge_collections():
+    promo_col = get_collection('Promotion')
+    image_col = get_collection('Image')
+
+    delete_all(promo_col)
+    delete_all(image_col)
 
 
 """
@@ -294,20 +312,22 @@ S3 upload and download
 if DEBUG:
     UPLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/upload'
     DOWNLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/download'
+    RESOURCES_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/resources'
 else:
     UPLOAD_PATH = '/home/ubuntu/tmp/upload'
     DOWNLOAD_PATH = '/home/ubuntu/tmp/download'
 
 
-def s3_upload(s3_resource, file, object_name):
+def s3_upload(s3_resource, file_path, object_name):
     try:
         bucket = s3_resource.Bucket(BUCKET_NAME)
 
-        bucket.put_object(
-            ACL='private',
-            Body=file,
-            Key=object_name
-        )
+        with open(file_path, "rb") as file:
+            bucket.put_object(
+                ACL='private',
+                Body=file,
+                Key=object_name
+            )
     except ClientError as e:
         logging.error(e)
 
@@ -421,16 +441,17 @@ def submit(description, email, file_path):
         'image_name': object_name,
         'promotion_id': _pid.inserted_id
     })
-    logging.info('ImageMap inserted [{0}]'.format(_mid.inserted_id))
+    logging.info(f''' [$] OBJECT SUCCESSFULLY INSERTED [{_mid.inserted_id}]''')
     # Publish promotion id
     # Must be string because ObjectId datatype does not have len property which causes RabbitMQ to crash
     mq_publish_promotion_id(str(_pid.inserted_id))
+    logging.info(f''' [^] {_pid.inserted_id} SUCCESSFULLY QUEUED''')
 
     return _pid.inserted_id, _mid.inserted_id
 
 
 def handle_uploaded_file(f, file_name):
-    path = UPLOAD_PATH + '/' + file_name + '.jpg'
+    path = UPLOAD_PATH + '/' + file_name
     with open(path, 'wb+') as destination:
         for chunk in f.chunks():
             destination.write(chunk)
@@ -468,11 +489,24 @@ def mq_make_queue(channel, queue):
 
 def mq_publish(channel, routing, body):
     channel.basic_publish(exchange='', routing_key=routing, body=body)
-    logging.info(" [x] Sent {0}".format(body))
+    logging.info(f''' [x] Sent {body}''')
 
 
 def callback(ch, method, properties, body):
-    print(" [x] Received %r" % body)
+    _pid = body.decode("utf-8")
+    # body = _pid
+    logging.info(f''' [x] Received {_pid}''')
+    # call AI Classifier
+    classify_image(_pid)
+    # email results to sender email
+    promotion = get_promotion_by_id(_pid)
+    subject = f'''Promotion {_pid} Status Changed'''
+    text = f'''Promotion ACCEPTED. \n{promotion}''' if promotion['category'] is not None \
+        else f'''Promotion REJECTED duo to violating Jaarkesh policy.'''
+
+    send_message(promotion['email'], subject, text)
+
+    logging.info(f''' [X] Email sent to {promotion['email']}''')
 
 
 def mq_consume(channel):
@@ -490,6 +524,103 @@ def mq_publish_promotion_id(_pid):
 
     mq_close_connection(conn)
 
+
+def mq_get_queued_messages_count(channel):
+    response = channel.queue_declare(QUEUE, passive=True)
+    return response.message_count
+
+
+"""
+Imagga AI Classifier
+"""
+
+IMAGGA_API_KEY = 'acc_2e80688085a396f'
+IMAGGA_API_SECRET = '40479798e62b45d3089ece942331efaf'
+IMAGGA_URL = 'https://api.imagga.com/v2/tags'
+
+
+def send_post_to_imagga(image_path):
+    response = requests.post(
+        IMAGGA_URL,
+        auth=(IMAGGA_API_KEY, IMAGGA_API_SECRET),
+        files={'image': open(image_path, 'rb')})
+    return response.json()
+
+
+def process_image(image_path):
+    categories = json.loads(json.dumps(send_post_to_imagga(image_path)['result']['tags']))
+
+    category = None
+    for c in categories:
+        if c['tag']['en'] == 'vehicle' and float(c['confidence']) >= 50.0:
+            category = categories[0]['tag']['en']
+            break
+
+    return category
+
+
+def classify_image(_pid):
+    # get promotion from Promotion collection
+    # if it has already been REJECTED return
+    promotion = get_promotion_by_id(_pid)
+    if promotion['state'] == State.REJECTED.value:
+        return
+
+        # get image from Image collection
+    image = get_image_name_by_pid(_pid)
+    # download image
+    s3_download(get_s3_resource(), image['image_name'])
+    file_path = DOWNLOAD_PATH + '/' + image['image_name']
+    # label image
+    category = process_image(file_path)
+    # update promotion
+    promo_col = get_collection('Promotion')
+    update(promo_col,
+           {
+               "_id": ObjectId(_pid)
+           },
+           {
+               "$set":
+                   {
+                       "category": category,
+                       "state": State.ACCEPTED.value if category is not None else State.REJECTED.value
+                   }
+           })
+
+    logging.info(f''' [-] Classification [{_pid}: {category}] SUCCESSFUL''')
+
+
+'''
+SMTP Mailgun API
+'''
+
+MAILGUN_YOU = 'Jaarkesh'
+MAILGUN_DOMAIN_NAME = 'sandbox2a80893d31a54dfab181d1bb5bfb5812.mailgun.org'
+MAILGUN_BASE_URL = 'https://api.mailgun.net/v3/sandbox2a80893d31a54dfab181d1bb5bfb5812.mailgun.org'
+MAILGUN_API_KEY = 'b7da97c31696dd4c8a8ef19065da1cd8-2de3d545-126e05d5'
+MAILGUN_FROM_EMAIL = 'Jaarkesh@sandbox2a80893d31a54dfab181d1bb5bfb5812.mailgun.org'
+
+
+def send_message(to, subject, text):
+    return requests.post(
+        f'''https://api.mailgun.net/v3/{MAILGUN_DOMAIN_NAME}/messages''',
+        auth=("api", MAILGUN_API_KEY),
+        data={"from": f'''<no-reply@{MAILGUN_DOMAIN_NAME}>''',
+              "to": to,
+              "subject": subject,
+              "text": text})
+
+# send_message(['bardia.ardakanian@gmail.com', 'bardia.ardakanian@yahoo.com'],
+#              'SMTP',
+#              'Hello there. Obi One')
+
+# classify_image('63776de34826626b7adf5e38')
+# purge_collections()
+
+# print(process_image(RESOURCES_PATH + '/' + 'car2.jpg'))
+# d = json.dumps(send_post_to_imagga(RESOURCES_PATH + '/' + 'cycle1.jpg')['result']['tags'], indent=2)
+# print(d, type(d))
+# print(json.loads(d), type(json.loads(d)))
 
 # print(State(1))
 # promotion_col = get_collection('Promotion')

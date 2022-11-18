@@ -21,4 +21,5 @@ urlpatterns = [
     path("", views.hello_world),
     path("submit-promotion", views.submit_promotion),
     path("get-promotion", views.get_promotion),
+    path("classify", views.classify_and_notify),
 ]
