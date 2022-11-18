@@ -52,7 +52,7 @@ def get_promotion(request):
         state = State(promotion['state'])
 
         if state == State.PROCESSING:
-            body = 'Promotion [{0}] is in processing queue'.format(request.GET.get('_pid'))
+            body = 'Promotion [{0}] is in PROCESSING stage'.format(request.GET.get('_pid'))
         elif state == State.ACCEPTED:
             info = {
                 'Message': 'Promotion [{0}] has been ACCEPTED'.format(request.GET.get('_pid')),
