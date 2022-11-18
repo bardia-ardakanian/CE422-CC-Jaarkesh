@@ -299,16 +299,15 @@ else:
     DOWNLOAD_PATH = '/home/ubuntu/tmp/download'
 
 
-def s3_upload(s3_resource, file_path, object_name):
+def s3_upload(s3_resource, file, object_name):
     try:
         bucket = s3_resource.Bucket(BUCKET_NAME)
 
-        with open(file_path, "rb") as file:
-            bucket.put_object(
-                ACL='private',
-                Body=file,
-                Key=object_name
-            )
+        bucket.put_object(
+            ACL='private',
+            Body=file,
+            Key=object_name
+        )
     except ClientError as e:
         logging.error(e)
 
@@ -415,7 +414,7 @@ def submit(description, email, file_path):
     logging.info('Promotion inserted [{0}]'.format(_pid.inserted_id))
     # Upload image
     object_name = generate_name()
-    s3_upload(get_s3_resource(), UPLOAD_PATH + file_path, object_name)
+    s3_upload(get_s3_resource(), file_path, object_name)
     # Map Image_name to Promotion_id
     image_col = get_collection('Image')
     _mid = insert(image_col, {
@@ -430,8 +429,17 @@ def submit(description, email, file_path):
     return _pid.inserted_id, _mid.inserted_id
 
 
-def generate_name():
-    return secrets.token_hex(16) + '.jpeg'
+def handle_uploaded_file(f, file_name):
+    path = UPLOAD_PATH + '/' + file_name + '.jpg'
+    with open(path, 'wb+') as destination:
+        for chunk in f.chunks():
+            destination.write(chunk)
+
+    return path
+
+
+def generate_name(length=16):
+    return secrets.token_hex(length) + '.jpeg'
 
 
 """
