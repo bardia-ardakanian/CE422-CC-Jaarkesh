@@ -14,8 +14,7 @@ import logging
 import json
 import secrets
 
-CONNECTION_STRING = 'mongodb+srv://mongoadmin:Cij3mPHBEvsWr5Jw' \
-                    '@cluster0.dpliugt.mongodb.net/?retryWrites=true&w=majority'
+CONNECTION_STRING = ''
 DB_NAME = 'Jaarkesh'
 PROMOTION_COL = 'Promotion'
 IMAGE_COL = 'Image'
@@ -153,10 +152,10 @@ def purge_collections():
 Arvan Cloud S3 storage
 """
 
-ENDPOINT_URL = 'https://s3.ir-thr-at1.arvanstorage.com'
-ACCESS_KEY = '03a4a9aa-3964-42f2-853a-5be0c4f5a6a0'
-SECRET_KEY = 'e1f0f1a0547b4f43d0f1fbd5bc2d805c4222ce8e'
-BUCKET_NAME = 'ce422image'
+ENDPOINT_URL = ''
+ACCESS_KEY = ''
+SECRET_KEY = ''
+BUCKET_NAME = ''
 
 logging.basicConfig(level=logging.INFO)
 
@@ -309,13 +308,9 @@ def remove_bucket_tagging(s3_client):
 """
 S3 upload and download
 """
-if DEBUG:
-    UPLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/upload'
-    DOWNLOAD_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/download'
-    RESOURCES_PATH = '/Users/Bardia/Documents/aut/courses/CE422-CC/assignments/jaarkesh-repo/resources'
-else:
-    UPLOAD_PATH = '/home/ubuntu/tmp/upload'
-    DOWNLOAD_PATH = '/home/ubuntu/tmp/download'
+
+UPLOAD_PATH = '/home/ubuntu/tmp/upload'
+DOWNLOAD_PATH = '/home/ubuntu/tmp/download'
 
 
 def s3_upload(s3_resource, file_path, object_name):
@@ -467,7 +462,7 @@ def generate_name(length=16):
 RabbitMQ Message broker service
 """
 
-AMQP_URL = 'amqps://visptmhc:LN7y3ZvEWB4t8HTIrXgPuTb3gmuwWW0-@stingray.rmq.cloudamqp.com/visptmhc'
+AMQP_URL = ''
 QUEUE = 'PROMOTION_QUEUE'
 
 
@@ -534,8 +529,8 @@ def mq_get_queued_messages_count(channel):
 Imagga AI Classifier
 """
 
-IMAGGA_API_KEY = 'acc_2e80688085a396f'
-IMAGGA_API_SECRET = '40479798e62b45d3089ece942331efaf'
+IMAGGA_API_KEY = ''
+IMAGGA_API_SECRET = ''
 IMAGGA_URL = 'https://api.imagga.com/v2/tags'
 
 
@@ -595,10 +590,10 @@ SMTP Mailgun API
 '''
 
 MAILGUN_YOU = 'Jaarkesh'
-MAILGUN_DOMAIN_NAME = 'sandbox2a80893d31a54dfab181d1bb5bfb5812.mailgun.org'
-MAILGUN_BASE_URL = 'https://api.mailgun.net/v3/sandbox2a80893d31a54dfab181d1bb5bfb5812.mailgun.org'
-MAILGUN_API_KEY = 'b7da97c31696dd4c8a8ef19065da1cd8-2de3d545-126e05d5'
-MAILGUN_FROM_EMAIL = 'Jaarkesh@sandbox2a80893d31a54dfab181d1bb5bfb5812.mailgun.org'
+MAILGUN_DOMAIN_NAME = ''
+MAILGUN_BASE_URL = ''
+MAILGUN_API_KEY = ''
+MAILGUN_FROM_EMAIL = ''
 
 
 def send_message(to, subject, text):
@@ -609,69 +604,3 @@ def send_message(to, subject, text):
               "to": to,
               "subject": subject,
               "text": text})
-
-# send_message(['bardia.ardakanian@gmail.com', 'bardia.ardakanian@yahoo.com'],
-#              'SMTP',
-#              'Hello there. Obi One')
-
-# classify_image('63776de34826626b7adf5e38')
-# purge_collections()
-
-# print(process_image(RESOURCES_PATH + '/' + 'car2.jpg'))
-# d = json.dumps(send_post_to_imagga(RESOURCES_PATH + '/' + 'cycle1.jpg')['result']['tags'], indent=2)
-# print(d, type(d))
-# print(json.loads(d), type(json.loads(d)))
-
-# print(State(1))
-# promotion_col = get_collection('Promotion')
-# x = find(promotion_col, {"_id": ObjectId('63769aa39b4865d2ced554ad')})
-# for i in x:
-#     print(x)
-# image_col = get_collection('Image')
-# delete_all(promotion_col)
-# delete_all(image_col)
-#
-# promotions = [
-#     {
-#         'description': 'Hi, Mom!',
-#         'email': '1@email.com',
-#         'state': State.PROCESSING.value,
-#         'category': None
-#     },
-#     {
-#         'description': 'Hi, Dad!',
-#         'email': '2@email.com',
-#         'state': State.ACCEPTED.value,
-#         'category': None
-#     },
-#     {
-#         'description': 'Hi, Bro!',
-#         'email': '3@email.com',
-#         'state': State.REJECTED.value,
-#         'category': None
-#     },
-# ]
-#
-# insert_many(promotion_col, promotions)
-# image_col = get_collection('Image')
-# delete_all(promotion_col)
-# delete_all(image_col)
-#
-# pid, mid = submit_promotion(
-#     "Test01. John Doe",
-#     "JohnDoe@email.com",
-#     UPLOAD_PATH + "/monkey.jpg",
-#     secrets.token_hex(16) + '.jpeg'
-# )
-#
-# image_map = find(image_col, {"_id": mid})[0]
-# print(image_map)
-#
-# s3_download(get_s3_resource(), image_map["image_name"])
-#
-# conn = mq_make_connection()
-# channel = mq_get_channel(conn)
-#
-# mq_consume(channel)
-#
-# mq_close_connection(conn)
